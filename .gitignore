@@ -1,0 +1,23 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Expo local files & build directories
+.expo/
+dist/
+web-build/
+
+# Expo native build directories (bỏ comment nếu bạn dùng hoàn toàn Managed Workflow không commit folder native)
+# ios/
+# android/
+
+# Local environment files (bảo mật khóa API)
+.env
+.env.local
+.env*.local
+
+# System files
+.DS_Store
+Thumbs.db
