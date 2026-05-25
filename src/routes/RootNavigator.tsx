@@ -8,10 +8,12 @@ import AuthNavigator from './AuthNavigator';
 import DriverNavigator from './DriverNavigator';
 import MerchantNavigator from './MerchantNavigator';
 import RoleSelectionScreen from '../screens/onboarding/RoleSelectionScreen';
+import PendingApprovalScreen from '../screens/auth/PendingApprovalScreen'; // Import màn hình chờ duyệt hồ sơ đối tác
 
 export type RootStackParamList = {
   RoleSelection: undefined;
   Auth: { role: 'driver' | 'merchant' };
+  PendingApproval: undefined;
   DriverApp: undefined;
   MerchantApp: undefined;
 };
@@ -19,7 +21,7 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
-  const { isLoggedIn, role } = useSelector((state: RootState) => state.auth);
+  const { isLoggedIn, role, user } = useSelector((state: RootState) => state.auth);
 
   return (
     <NavigationContainer>
@@ -32,6 +34,9 @@ export default function RootNavigator() {
           <Stack.Screen name="Auth">
             {() => <AuthNavigator role={role} />}
           </Stack.Screen>
+        ) : user?.status === 'pending' ? (
+          // 2.5 Đã đăng nhập nhưng đang chờ xét duyệt hồ sơ đối tác
+          <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
         ) : role === 'driver' ? (
           // 3a. Đăng nhập thành công với vai trò Tài xế
           <Stack.Screen name="DriverApp" component={DriverNavigator} />

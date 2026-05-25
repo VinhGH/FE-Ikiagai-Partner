@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { loginSuccess, setRole } from '../../../redux/actions/authActions';
 import { COLORS } from '../../../constants/colors';
@@ -7,7 +8,7 @@ import { SPACING, SIZES } from '../../../constants/theme';
 import Input from '../../../components/shared/Input';
 import Button from '../../../components/shared/Button';
 
-export default function DriverLoginScreen() {
+export default function DriverLoginScreen({ navigation }: any) {
   const dispatch = useDispatch();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -79,7 +80,7 @@ export default function DriverLoginScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Chưa có tài khoản tài xế? </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('DriverRegister')}>
             <Text style={[styles.registerText, { color: COLORS.driver }]}>Đăng ký ngay</Text>
           </TouchableOpacity>
         </View>

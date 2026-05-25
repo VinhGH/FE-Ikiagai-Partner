@@ -1,13 +1,13 @@
 export const COLORS = {
-  // Brand Colors (Ikigai Food)
-  primary: '#E11D48',      // Rose Red
-  primaryLight: '#FFE4E6',
-  primaryDark: '#BE123C',
+  // Brand Colors (Ikigai Partner)
+  primary: '#6ED6F2',      // Custom Sky Blue
+  primaryLight: '#E0F7FE',
+  primaryDark: '#0284C7',
 
   // Driver Colors (Dynamic & Active)
-  driver: '#059669',       // Emerald Green
-  driverLight: '#D1FAE5',
-  driverDark: '#047857',
+  driver: '#6ED6F2',       // Custom Sky Blue
+  driverLight: '#E0F7FE',
+  driverDark: '#0284C7',
 
   // Merchant Colors (Warm & Food-related)
   merchant: '#EA580C',     // Orange

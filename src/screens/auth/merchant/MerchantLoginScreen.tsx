@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { loginSuccess, setRole } from '../../../redux/actions/authActions';
 import { COLORS } from '../../../constants/colors';
@@ -7,7 +8,7 @@ import { SPACING, SIZES } from '../../../constants/theme';
 import Input from '../../../components/shared/Input';
 import Button from '../../../components/shared/Button';
 
-export default function MerchantLoginScreen() {
+export default function MerchantLoginScreen({ navigation }: any) {
   const dispatch = useDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,7 +80,7 @@ export default function MerchantLoginScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Chưa liên kết nhà hàng? </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('MerchantRegister')}>
             <Text style={[styles.registerText, { color: COLORS.merchant }]}>Đăng ký ngay</Text>
           </TouchableOpacity>
         </View>

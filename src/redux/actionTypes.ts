@@ -1,3 +1,5 @@
 export const SET_ROLE = 'SET_ROLE';
 export const LOGIN_SUCCESS = 'LOGIN_SUCCESS';
 export const LOGOUT = 'LOGOUT';
+export const REGISTER_SUCCESS = 'REGISTER_SUCCESS';
+export const UPDATE_USER_STATUS = 'UPDATE_USER_STATUS';

@@ -1,4 +1,4 @@
-import { SET_ROLE, LOGIN_SUCCESS, LOGOUT } from '../actionTypes';
+import { SET_ROLE, LOGIN_SUCCESS, LOGOUT, REGISTER_SUCCESS, UPDATE_USER_STATUS } from '../actionTypes';
 
 export interface AuthState {
   isLoggedIn: boolean;
@@ -26,8 +26,32 @@ export const authReducer = (state = initialState, action: any): AuthState => {
         ...state,
         isLoggedIn: true,
         token: action.payload.token,
-        user: action.payload.user,
         role: action.payload.role,
+        user: {
+          ...action.payload.user,
+          status: action.payload.user.status || 'approved', // Mặc định đăng nhập bình thường là đã duyệt
+        },
+      };
+    case REGISTER_SUCCESS:
+      return {
+        ...state,
+        isLoggedIn: true,
+        token: action.payload.token,
+        role: action.payload.role,
+        user: {
+          ...action.payload.user,
+          status: 'pending', // Đăng ký mới luôn là chờ xét duyệt
+        },
+      };
+    case UPDATE_USER_STATUS:
+      return {
+        ...state,
+        user: state.user
+          ? {
+              ...state.user,
+              status: action.payload,
+            }
+          : null,
       };
     case LOGOUT:
       return {
