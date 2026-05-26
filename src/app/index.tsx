@@ -1,5 +1,4 @@
-export { default } from 'expo-router';
-
-export function Index() {
+export default function Index() {
   return null;
 }
+

@@ -1,1 +1,3 @@
-export { default } from '../../features/merchant/screens/MerchantHomeScreen';
+import MerchantHomeScreen from '../../features/merchant/screens/MerchantHomeScreen';
+
+export default MerchantHomeScreen;

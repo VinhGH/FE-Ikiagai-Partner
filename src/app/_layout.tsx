@@ -23,55 +23,45 @@ export default function RootLayout() {
     );
   }
 
-  const currentGroup = segments[0];
+  const currentGroup = segments[0] as string | undefined;
 
-  // 1. Chưa chọn vai trò -> Bắt buộc chọn vai trò trước
+  // Tính toán href cần redirect (nếu có)
+  let redirectHref: string | null = null;
+
   if (!role) {
+    // 1. Chưa chọn vai trò -> Bắt buộc chọn vai trò trước
     if (currentGroup !== '(onboarding)') {
-      return (
-        <SafeAreaProvider>
-          <Redirect href="/(onboarding)/role-selection" />
-        </SafeAreaProvider>
-      );
+      redirectHref = '/role-selection';
     }
-  } 
-  // 2. Đã chọn vai trò nhưng chưa đăng nhập -> Đưa vào luồng Auth của vai trò đó
-  else if (!isLoggedIn) {
-    const isAuthGroup = currentGroup === '(auth)';
-    if (!isAuthGroup) {
-      const loginRoute = role === 'driver' ? '/driver-login' : '/merchant-login';
-      return (
-        <SafeAreaProvider>
-          <Redirect href={loginRoute} />
-        </SafeAreaProvider>
-      );
+  } else if (!isLoggedIn) {
+    // 2. Đã chọn vai trò nhưng chưa đăng nhập -> Đưa vào luồng Auth
+    if (currentGroup !== '(auth)') {
+      redirectHref = role === 'driver' ? '/driver-login' : '/merchant-login';
     }
-  } 
-  // 3. Đã đăng nhập nhưng đang chờ xét duyệt hồ sơ đối tác
-  else if (user?.status === 'pending') {
+  } else if (user?.status === 'pending') {
+    // 3. Đăng nhập nhưng đang chờ duyệt hồ sơ
     if (segments[segments.length - 1] !== 'pending-approval') {
-      return (
-        <SafeAreaProvider>
-          <Redirect href="/pending-approval" />
-        </SafeAreaProvider>
-      );
+      redirectHref = '/pending-approval';
     }
-  } 
-  // 4. Đăng nhập thành công và hồ sơ đã duyệt -> Đưa vào dashboard vai trò tương ứng
-  else {
+  } else {
+    // 4. Đăng nhập thành công -> Đưa vào dashboard tương ứng
+    // Các route chia sẻ (shared) được truy cập bởi cả merchant lẫn driver
+    const SHARED_ROUTES = ['chat', 'pending-approval'];
     const expectedGroup = role === 'driver' ? '(driver)' : '(merchant)';
-    if (currentGroup !== expectedGroup && segments[segments.length - 1] !== 'pending-approval') {
-      const homeRoute = role === 'driver' ? '/dashboard' : '/home';
-      return (
-        <SafeAreaProvider>
-          <Redirect href={homeRoute} />
-        </SafeAreaProvider>
-      );
+    const isSharedRoute = currentGroup !== undefined && SHARED_ROUTES.includes(currentGroup);
+    if (
+      currentGroup !== expectedGroup &&
+      !isSharedRoute &&
+      segments[segments.length - 1] !== 'pending-approval'
+    ) {
+      redirectHref = role === 'driver' ? '/dashboard' : '/merchant-orders';
     }
   }
 
+  // Luôn render cùng một cây component để tránh unmount/remount không cần thiết
   return (
     <SafeAreaProvider>
+      {redirectHref ? <Redirect href={redirectHref as any} /> : null}
       <Stack screenOptions={{ headerShown: false }} />
     </SafeAreaProvider>
   );

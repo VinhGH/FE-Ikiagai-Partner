@@ -44,7 +44,7 @@ export default function DriverTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="orders"
+        name="driver-orders"
         options={{
           title: 'Đơn hàng',
           headerTitle: 'Đơn hàng',
@@ -65,6 +65,12 @@ export default function DriverTabsLayout() {
           title: 'Cá nhân',
           headerTitle: 'Tài khoản',
           tabBarIcon: ({ color }) => <MaterialIcons name="person" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reimbursement"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
