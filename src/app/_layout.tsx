@@ -54,7 +54,7 @@ export default function RootLayout() {
       !isSharedRoute &&
       segments[segments.length - 1] !== 'pending-approval'
     ) {
-      redirectHref = role === 'driver' ? '/dashboard' : '/merchant-orders';
+      redirectHref = role === 'driver' ? '/dashboard' : '/home';
     }
   }
 

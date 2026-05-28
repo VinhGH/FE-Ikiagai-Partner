@@ -284,13 +284,15 @@ export default function MerchantOrdersScreen() {
           >
             <MaterialIcons name="phone" size={15} color={COLORS.driver} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.commIconBtn} 
-            onPress={() => handleMessage(item.id, 'customer')}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="sms" size={15} color="#0EA5E9" />
-          </TouchableOpacity>
+          {item.status !== 'new' && (
+            <TouchableOpacity 
+              style={styles.commIconBtn} 
+              onPress={() => handleMessage(item.id, 'customer')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="sms" size={15} color="#0EA5E9" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

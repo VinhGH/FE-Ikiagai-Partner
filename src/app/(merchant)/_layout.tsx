@@ -36,6 +36,14 @@ export default function MerchantTabsLayout() {
       }}
     >
       <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Trang chủ',
+          headerTitle: 'Trang chủ quán ăn',
+          tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="merchant-orders"
         options={{
           title: 'Đơn hàng',
@@ -60,14 +68,6 @@ export default function MerchantTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Doanh thu',
-          headerTitle: 'Báo cáo doanh thu',
-          tabBarIcon: ({ color }) => <MaterialIcons name="bar-chart" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: 'Cửa hàng',
@@ -76,8 +76,28 @@ export default function MerchantTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="home"
-        options={{ href: null }}
+        name="analytics"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="feedbacks"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="incidents"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-assistant"
+        options={{
+          href: null,
+        }}
       />
     </Tabs>
   );

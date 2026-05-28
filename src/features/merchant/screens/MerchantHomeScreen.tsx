@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, Dimensions, Alert,
+  Modal, Dimensions, Alert, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -12,36 +12,100 @@ import { useAuthStore } from '../../../store/useAuthStore';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
+// ─── Mock Data & Types ─────────────────────────────────────────────────────────
 
-const TODAY_STATS = {
-  date: 'Thứ Hai, 26/05/2025',
-  ordersTotal: 14,
-  ordersCompleted: 11,
-  ordersCancelled: 2,
-  ordersPending: 1,
-  revenue: 2_350_000,
-  avgOrderValue: 167_857,
-  payout: 1_997_500,   // 85% after platform fee
-  newCustomers: 3,
+interface HourlyItem {
+  hour: string;
+  orders: number;
+}
+
+interface PeriodStats {
+  date: string;
+  ordersTotal: number;
+  ordersCompleted: number;
+  ordersCancelled: number;
+  ordersPending: number;
+  revenue: number;
+  avgOrderValue: number;
+  payout: number;
+  newCustomers: number;
+  growth: string;
+  hourly: HourlyItem[];
+}
+
+const STATS_DATA: Record<'today' | 'yesterday' | 'week', PeriodStats> = {
+  today: {
+    date: 'Thứ Năm, 28/05/2026',
+    ordersTotal: 14,
+    ordersCompleted: 11,
+    ordersCancelled: 2,
+    ordersPending: 1,
+    revenue: 2_350_000,
+    avgOrderValue: 167_857,
+    payout: 1_997_500,
+    newCustomers: 3,
+    growth: '+23% so với hôm qua',
+    hourly: [
+      { hour: '8h',  orders: 1 },
+      { hour: '9h',  orders: 3 },
+      { hour: '10h', orders: 5 },
+      { hour: '11h', orders: 4 },
+      { hour: '12h', orders: 6 },
+      { hour: '13h', orders: 2 },
+      { hour: '14h', orders: 1 },
+      { hour: '15h', orders: 0 },
+    ],
+  },
+  yesterday: {
+    date: 'Thứ Tư, 27/05/2026',
+    ordersTotal: 12,
+    ordersCompleted: 10,
+    ordersCancelled: 1,
+    ordersPending: 1,
+    revenue: 1_910_000,
+    avgOrderValue: 159_166,
+    payout: 1_623_500,
+    newCustomers: 2,
+    growth: '+15% so với thứ Ba',
+    hourly: [
+      { hour: '8h',  orders: 0 },
+      { hour: '9h',  orders: 2 },
+      { hour: '10h', orders: 4 },
+      { hour: '11h', orders: 3 },
+      { hour: '12h', orders: 5 },
+      { hour: '13h', orders: 3 },
+      { hour: '14h', orders: 1 },
+      { hour: '15h', orders: 0 },
+    ],
+  },
+  week: {
+    date: 'Tuần này (22/05 - 28/05)',
+    ordersTotal: 98,
+    ordersCompleted: 89,
+    ordersCancelled: 6,
+    ordersPending: 3,
+    revenue: 16_840_000,
+    avgOrderValue: 171_836,
+    payout: 14_314_000,
+    newCustomers: 18,
+    growth: '+8% so với tuần trước',
+    hourly: [
+      { hour: 'T2',  orders: 12 },
+      { hour: 'T3',  orders: 15 },
+      { hour: 'T4',  orders: 12 },
+      { hour: 'T5',  orders: 14 },
+      { hour: 'T6',  orders: 18 },
+      { hour: 'T7',  orders: 21 },
+      { hour: 'CN',  orders: 6 },
+    ],
+  },
 };
-
-const HOURLY_DATA = [
-  { hour: '8h',  orders: 1 },
-  { hour: '9h',  orders: 3 },
-  { hour: '10h', orders: 5 },
-  { hour: '11h', orders: 4 },
-  { hour: '12h', orders: 6 },
-  { hour: '13h', orders: 2 },
-  { hour: '14h', orders: 1 },
-  { hour: '15h', orders: 0 },
-];
 
 interface Feedback {
   id: string;
   orderId: string;
   customerName: string;
-  rating: number;   // 1-5
+  rating: number;
   comment: string;
   time: string;
 }
@@ -59,8 +123,27 @@ interface QuickAction {
   label: string;
   color: string;
   bg: string;
-  route?: string;
-  action?: () => void;
+  action: () => void;
+}
+
+interface ActiveOrder {
+  id: string;
+  customerName: string;
+  time: string;
+  status: 'new' | 'preparing' | 'ready';
+  total: string;
+  itemsCount: number;
+}
+
+interface Campaign {
+  id: string;
+  type: 'coupon' | 'flash_sale' | 'featured';
+  title: string;
+  code?: string;
+  discount: string;
+  sub: string;
+  performance: string;
+  status: 'active' | 'paused';
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,7 +175,6 @@ function StarRating({ rating }: { rating: number }) {
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-/** Compact stat card */
 function StatCard({
   label, value, sub, icon, iconBg, iconColor, large,
 }: {
@@ -111,14 +193,13 @@ function StatCard({
   );
 }
 
-/** Sparkline mini bar chart */
-function HourlyChart() {
-  const max = Math.max(...HOURLY_DATA.map((d) => d.orders));
+function HourlyChart({ data }: { data: HourlyItem[] }) {
+  const max = Math.max(...data.map((d) => d.orders));
   const BAR_H = 60;
   return (
     <View style={chart.container}>
       <View style={chart.bars}>
-        {HOURLY_DATA.map((d) => (
+        {data.map((d) => (
           <View key={d.hour} style={chart.barCol}>
             <Text style={chart.barVal}>{d.orders > 0 ? d.orders : ''}</Text>
             <View style={chart.barTrack}>
@@ -127,7 +208,7 @@ function HourlyChart() {
                   chart.barFill,
                   {
                     height: max > 0 ? (d.orders / max) * BAR_H : 0,
-                    backgroundColor: d.orders === max ? COLORS.driver : COLORS.primaryLight,
+                    backgroundColor: d.orders === max ? COLORS.driverDark : COLORS.primaryLight,
                   },
                 ]}
               />
@@ -140,9 +221,8 @@ function HourlyChart() {
   );
 }
 
-/** Order breakdown donut-style progress row */
-function OrderBreakdown() {
-  const { ordersTotal, ordersCompleted, ordersCancelled, ordersPending } = TODAY_STATS;
+function OrderBreakdown({ stats }: { stats: PeriodStats }) {
+  const { ordersTotal, ordersCompleted, ordersCancelled, ordersPending } = stats;
   const rows = [
     { label: 'Hoàn thành', count: ordersCompleted, color: '#16A34A', bg: '#DCFCE7' },
     { label: 'Đã hủy',     count: ordersCancelled, color: COLORS.error, bg: '#FEE2E2' },
@@ -159,7 +239,7 @@ function OrderBreakdown() {
               style={[
                 bd.barFill,
                 {
-                  width: `${(r.count / ordersTotal) * 100}%` as any,
+                  width: `${ordersTotal > 0 ? (r.count / ordersTotal) * 100 : 0}%` as any,
                   backgroundColor: r.color,
                 },
               ]}
@@ -174,17 +254,69 @@ function OrderBreakdown() {
   );
 }
 
-/** Marketing / promo modal */
 function MarketingModal({
   visible,
   onClose,
+  onCreateCampaign,
 }: {
   visible: boolean;
   onClose: () => void;
+  onCreateCampaign: (campaign: Omit<Campaign, 'id' | 'performance' | 'status'>) => void;
 }) {
+  const [promoType, setPromoType] = useState<'coupon' | 'flash_sale' | 'featured' | null>(null);
+  
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState('');
+  const [couponMin, setCouponMin] = useState('');
+
+  const [flashDiscount, setFlashDiscount] = useState('');
+  const [flashTime, setFlashTime] = useState('11h - 13h');
+
+  const handleCreateCampaign = () => {
+    if (promoType === 'coupon') {
+      if (!couponCode.trim() || !couponDiscount.trim()) {
+        Alert.alert('Thiếu thông tin', 'Vui lòng nhập đầy đủ mã giảm giá và số tiền giảm.');
+        return;
+      }
+      onCreateCampaign({
+        type: 'coupon',
+        title: `Mã giảm giá ${couponCode.trim().toUpperCase()}`,
+        code: couponCode.trim().toUpperCase(),
+        discount: couponDiscount.includes('đ') || couponDiscount.includes('%') ? couponDiscount : `${couponDiscount}đ`,
+        sub: couponMin ? `Đơn hàng tối thiểu ${couponMin}` : 'Mọi đơn hàng',
+      });
+      setCouponCode('');
+      setCouponDiscount('');
+      setCouponMin('');
+    } else if (promoType === 'flash_sale') {
+      if (!flashDiscount.trim()) {
+        Alert.alert('Thiếu thông tin', 'Vui lòng nhập phần trăm giảm giá Flash Sale.');
+        return;
+      }
+      onCreateCampaign({
+        type: 'flash_sale',
+        title: `Flash Sale Giờ Vàng`,
+        discount: `Giảm ${flashDiscount.includes('%') ? flashDiscount : `${flashDiscount}%`}`,
+        sub: `Khung giờ ${flashTime}`,
+      });
+      setFlashDiscount('');
+      setFlashTime('11h - 13h');
+    } else if (promoType === 'featured') {
+      onCreateCampaign({
+        type: 'featured',
+        title: 'Quảng cáo nổi bật',
+        discount: 'Vị trí Top quán ngon',
+        sub: 'Hiển thị ưu tiên trong 24 giờ tiếp theo',
+      });
+    }
+
+    setPromoType(null);
+    onClose();
+  };
+
   const PROMOTIONS = [
     {
-      id: 'promo1',
+      id: 'coupon',
       icon: 'local-offer',
       title: 'Mã giảm giá',
       desc: 'Tạo mã khuyến mãi FREESHIP hoặc % giảm giá',
@@ -192,23 +324,7 @@ function MarketingModal({
       bg: '#FEF3C7',
     },
     {
-      id: 'promo2',
-      icon: 'campaign',
-      title: 'Quảng cáo nổi bật',
-      desc: 'Đẩy quán lên đầu danh sách tìm kiếm trong app',
-      color: COLORS.primaryDark,
-      bg: COLORS.primaryLight,
-    },
-    {
-      id: 'promo3',
-      icon: 'card-giftcard',
-      title: 'Combo khuyến mãi',
-      desc: 'Kết hợp các món để tạo combo giá hấp dẫn',
-      color: '#7C3AED',
-      bg: '#EDE9FE',
-    },
-    {
-      id: 'promo4',
+      id: 'flash_sale',
       icon: 'flash-on',
       title: 'Flash Sale',
       desc: 'Giảm giá sốc trong khung giờ vàng (11h-13h)',
@@ -216,49 +332,140 @@ function MarketingModal({
       bg: '#FEE2E2',
     },
     {
-      id: 'promo5',
-      icon: 'star',
-      title: 'Chương trình tích điểm',
-      desc: 'Thưởng điểm tích lũy cho khách hàng thân thiết',
-      color: '#F59E0B',
-      bg: '#FEF9C3',
+      id: 'featured',
+      icon: 'campaign',
+      title: 'Quảng cáo nổi bật',
+      desc: 'Đẩy quán lên đầu danh sách tìm kiếm trong app',
+      color: COLORS.primaryDark,
+      bg: COLORS.primaryLight,
     },
   ];
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={mkt.overlay}>
         <View style={mkt.sheet}>
           <View style={mkt.handle} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-            <MaterialIcons name="campaign" size={22} color={COLORS.primaryDark} style={{ marginRight: 8 }} />
-            <Text style={mkt.title}>Công cụ Marketing</Text>
-          </View>
-          <Text style={mkt.sub}>Tăng doanh thu với các chiến dịch khuyến mãi</Text>
-          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
-            {PROMOTIONS.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                style={mkt.item}
-                activeOpacity={0.75}
-                onPress={() => {
-                  onClose();
-                  Alert.alert(p.title, `Tính năng "${p.title}" sẽ sớm ra mắt trong phiên bản tiếp theo. Cảm ơn bạn đã quan tâm!`);
-                }}
-              >
-                <View style={[mkt.itemIcon, { backgroundColor: p.bg }]}>
-                  <MaterialIcons name={p.icon as any} size={24} color={p.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={mkt.itemTitle}>{p.title}</Text>
-                  <Text style={mkt.itemDesc}>{p.desc}</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+
+          {promoType === null ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <MaterialIcons name="campaign" size={22} color={COLORS.primaryDark} style={{ marginRight: 8 }} />
+                <Text style={mkt.title}>Công cụ Marketing</Text>
+              </View>
+              <Text style={mkt.sub}>Tăng doanh thu với các chiến dịch khuyến mãi</Text>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+                {PROMOTIONS.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={mkt.item}
+                    activeOpacity={0.75}
+                    onPress={() => setPromoType(p.id as any)}
+                  >
+                    <View style={[mkt.itemIcon, { backgroundColor: p.bg }]}>
+                      <MaterialIcons name={p.icon as any} size={24} color={p.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={mkt.itemTitle}>{p.title}</Text>
+                      <Text style={mkt.itemDesc}>{p.desc}</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={mkt.closeBtn} onPress={onClose} activeOpacity={0.8}>
+                <Text style={mkt.closeBtnText}>Đóng</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-          <TouchableOpacity style={mkt.closeBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={mkt.closeBtnText}>Đóng</Text>
-          </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{ paddingVertical: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <TouchableOpacity onPress={() => setPromoType(null)} style={{ marginRight: 10 }}>
+                  <MaterialIcons name="arrow-back" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+                <Text style={mkt.title}>
+                  {promoType === 'coupon' ? 'Tạo Mã Giảm Giá' :
+                   promoType === 'flash_sale' ? 'Tạo Flash Sale' : 'Đăng Ký Quảng Cáo'}
+                </Text>
+              </View>
+
+              {promoType === 'coupon' && (
+                <View style={form.container}>
+                  <Text style={form.label}>Mã giảm giá (Ví dụ: IKIGAI30)</Text>
+                  <TextInput
+                    style={form.input}
+                    placeholder="IKIGAI30"
+                    placeholderTextColor={COLORS.textLight}
+                    autoCapitalize="characters"
+                    value={couponCode}
+                    onChangeText={setCouponCode}
+                  />
+
+                  <Text style={form.label}>Giá trị giảm (Ví dụ: 30.000đ hoặc 20%)</Text>
+                  <TextInput
+                    style={form.input}
+                    placeholder="30.000đ"
+                    placeholderTextColor={COLORS.textLight}
+                    value={couponDiscount}
+                    onChangeText={setCouponDiscount}
+                  />
+
+                  <Text style={form.label}>Giá trị đơn tối thiểu (Tùy chọn)</Text>
+                  <TextInput
+                    style={form.input}
+                    placeholder="120.000đ"
+                    placeholderTextColor={COLORS.textLight}
+                    value={couponMin}
+                    onChangeText={setCouponMin}
+                  />
+                </View>
+              )}
+
+              {promoType === 'flash_sale' && (
+                <View style={form.container}>
+                  <Text style={form.label}>Mức giảm giá (%)</Text>
+                  <TextInput
+                    style={form.input}
+                    placeholder="20%"
+                    placeholderTextColor={COLORS.textLight}
+                    keyboardType="numeric"
+                    value={flashDiscount}
+                    onChangeText={setFlashDiscount}
+                  />
+
+                  <Text style={form.label}>Khung giờ vàng Flash Sale</Text>
+                  <TextInput
+                    style={form.input}
+                    placeholder="11h - 13h"
+                    placeholderTextColor={COLORS.textLight}
+                    value={flashTime}
+                    onChangeText={setFlashTime}
+                  />
+                </View>
+              )}
+
+              {promoType === 'featured' && (
+                <View style={form.container}>
+                  <View style={form.featuredBanner}>
+                    <MaterialIcons name="bolt" size={32} color="#F59E0B" style={{ marginBottom: 8 }} />
+                    <Text style={form.featuredText}>
+                      Quán sẽ được hiển thị ở vị trí TOP đầu tìm kiếm và có nhãn "Được tài trợ" nổi bật trên ứng dụng Khách hàng.
+                    </Text>
+                    <Text style={form.featuredPrice}>Chi phí: 150.000đ / ngày</Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: SPACING.lg }}>
+                <TouchableOpacity style={[mkt.closeBtn, { flex: 1, marginTop: 0 }]} onPress={() => setPromoType(null)}>
+                  <Text style={mkt.closeBtnText}>Quay lại</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[form.submitBtn, { flex: 2 }]} onPress={handleCreateCampaign}>
+                  <Text style={form.submitBtnText}>Kích hoạt ngay</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -269,13 +476,40 @@ function MarketingModal({
 
 export default function MerchantHomeScreen() {
   const user = useAuthStore((s) => s.user);
+  
+  // Dashboard Status and Navigation
+  const [storeStatus, setStoreStatus] = useState<'open' | 'closed'>('open');
+  const [statsPeriod, setStatsPeriod] = useState<'today' | 'yesterday' | 'week'>('today');
   const [mktVisible, setMktVisible] = useState(false);
+
+  // Active / Urgent Orders State
+  const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([
+    { id: 'IKG-8822', customerName: 'Trần Thị B', time: '5m trước', status: 'new', total: '350.000đ', itemsCount: 3 },
+    { id: 'IKG-1152', customerName: 'Nguyễn Văn C', time: '12m trước', status: 'new', total: '230.000đ', itemsCount: 2 },
+    { id: 'IKG-9801', customerName: 'Lê Văn Khải', time: '25m trước', status: 'preparing', total: '190.000đ', itemsCount: 1 },
+  ]);
+
+  // Marketing Campaigns Simulator State
+  const [campaigns, setCampaigns] = useState<Campaign[]>([
+    {
+      id: 'c1',
+      type: 'coupon',
+      title: 'Mã giảm giá khai trương',
+      code: 'IKIGAI15',
+      discount: 'Giảm 15.000đ',
+      sub: 'Đơn tối thiểu 120.000đ',
+      performance: 'Đã dùng 24 lần · Doanh thu +540k',
+      status: 'active',
+    }
+  ]);
 
   const greetingHour = new Date().getHours();
   const greeting =
     greetingHour < 11 ? 'Chào buổi sáng' :
     greetingHour < 14 ? 'Chào buổi trưa' :
     greetingHour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
+
+  const currentStats = STATS_DATA[statsPeriod];
 
   const QUICK_ACTIONS: QuickAction[] = [
     {
@@ -289,9 +523,9 @@ export default function MerchantHomeScreen() {
       action: () => router.push('/menu'),
     },
     {
-      id: 'q3', icon: 'campaign', label: 'Marketing',
-      color: '#D97706', bg: '#FEF3C7',
-      action: () => setMktVisible(true),
+      id: 'q3', icon: 'star', label: 'Đánh giá',
+      color: '#F59E0B', bg: '#FEF9C3',
+      action: () => router.push('/feedbacks'),
     },
     {
       id: 'q4', icon: 'bar-chart', label: 'Doanh thu',
@@ -299,12 +533,22 @@ export default function MerchantHomeScreen() {
       action: () => router.push('/analytics'),
     },
     {
-      id: 'q5', icon: 'chat', label: 'Tin nhắn',
-      color: COLORS.driver, bg: COLORS.driverLight,
-      action: () => router.push('/chats'),
+      id: 'q5', icon: 'psychology', label: 'Trợ lý AI',
+      color: '#7C3AED', bg: '#EDE9FE',
+      action: () => router.push('/ai-assistant'),
     },
     {
-      id: 'q6', icon: 'storefront', label: 'Cửa hàng',
+      id: 'q6', icon: 'campaign', label: 'Marketing',
+      color: '#D97706', bg: '#FEF3C7',
+      action: () => setMktVisible(true),
+    },
+    {
+      id: 'q7', icon: 'report-problem', label: 'Sự cố',
+      color: COLORS.error, bg: '#FEE2E2',
+      action: () => router.push('/incidents'),
+    },
+    {
+      id: 'q8', icon: 'storefront', label: 'Cửa hàng',
       color: COLORS.merchantDark, bg: COLORS.merchantLight,
       action: () => router.push('/settings'),
     },
@@ -312,16 +556,73 @@ export default function MerchantHomeScreen() {
 
   const avgRating = (FEEDBACKS.reduce((s, f) => s + f.rating, 0) / FEEDBACKS.length).toFixed(1);
 
+  // Handlers
+  const handleToggleStatus = () => {
+    if (storeStatus === 'open') {
+      Alert.alert(
+        'Xác nhận tạm đóng cửa',
+        'Khách hàng sẽ không thể đặt món trong thời gian quán đóng cửa. Bạn có chắc chắn?',
+        [
+          { text: 'Bỏ qua', style: 'cancel' },
+          { text: 'Tạm đóng', style: 'destructive', onPress: () => {
+            setStoreStatus('closed');
+            Alert.alert('Thành công', 'Quán đã được chuyển sang trạng thái Tạm nghỉ.');
+          }}
+        ]
+      );
+    } else {
+      setStoreStatus('open');
+      Alert.alert('Thành công', 'Quán đã mở cửa hoạt động trở lại.');
+    }
+  };
+
+  const handleOrderPress = (order: ActiveOrder) => {
+    router.push({
+      pathname: '/merchant-orders',
+      params: { tab: order.status === 'new' ? 'new' : 'preparing' }
+    });
+  };
+
+  const handleCreateCampaign = (newC: Omit<Campaign, 'id' | 'performance' | 'status'>) => {
+    const freshCampaign: Campaign = {
+      ...newC,
+      id: 'c_' + Date.now(),
+      performance: 'Đã dùng 0 lần · Doanh thu +0đ',
+      status: 'active',
+    };
+    setCampaigns(prev => [freshCampaign, ...prev]);
+    Alert.alert('Tạo chiến dịch thành công', `Chiến dịch "${freshCampaign.title}" đã bắt đầu hoạt động.`);
+  };
+
+  const handleCampaignPause = (id: string) => {
+    setCampaigns(prev => prev.map(c => {
+      if (c.id === id) {
+        const nextStatus = c.status === 'active' ? 'paused' : 'active';
+        return { ...c, status: nextStatus };
+      }
+      return c;
+    }));
+  };
+
+  const handleCampaignDelete = (id: string) => {
+    Alert.alert('Xác nhận xóa', 'Bạn có chắc muốn xóa chiến dịch marketing này?', [
+      { text: 'Không', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: () => {
+        setCampaigns(prev => prev.filter(c => c.id !== id));
+      }}
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         {/* ── Greeting Header ── */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.greeting}>{greeting} 👋</Text>
-            <Text style={styles.shopName}>{user?.name ?? 'Ikigai Restaurant'}</Text>
-            <Text style={styles.dateText}>{TODAY_STATS.date}</Text>
+            <Text style={styles.shopName} numberOfLines={1}>{user?.name ?? 'Ikigai Restaurant'}</Text>
+            <Text style={styles.dateText}>{currentStats.date}</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
@@ -329,7 +630,7 @@ export default function MerchantHomeScreen() {
               onPress={() => Alert.alert('Thông báo', 'Bạn có 2 đơn hàng mới chờ xử lý!')}
             >
               <MaterialIcons name="notifications" size={22} color={COLORS.text} />
-              <View style={styles.notifDot} />
+              {activeOrders.filter(o => o.status === 'new').length > 0 && <View style={styles.notifDot} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.notifBtn, { backgroundColor: COLORS.primaryLight }]}
@@ -340,32 +641,111 @@ export default function MerchantHomeScreen() {
           </View>
         </View>
 
-        {/* ── Revenue Hero Card ── */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View>
-              <Text style={styles.heroLabel}>Doanh thu hôm nay</Text>
-              <Text style={styles.heroRevenue}>{formatFullCurrency(TODAY_STATS.revenue)}</Text>
-              <View style={styles.heroPayout}>
-                <MaterialIcons name="account-balance-wallet" size={13} color={COLORS.driverLight} />
-                <Text style={styles.heroPayoutText}>
-                  Về ví quán: {formatFullCurrency(TODAY_STATS.payout)}
+        {/* ── Operational Status Banner ── */}
+        <View style={[styles.statusBanner, storeStatus === 'closed' && styles.statusBannerClosed]}>
+          <View style={styles.statusBannerLeft}>
+            <View style={[styles.statusIndicator, { backgroundColor: storeStatus === 'open' ? COLORS.success : COLORS.error }]} />
+            <Text style={styles.statusBannerText}>
+              Trạng thái hoạt động: <Text style={{ fontWeight: '800' }}>{storeStatus === 'open' ? 'MỞ CỬA' : 'TẠM NGHỈ'}</Text>
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.statusToggleBtn, storeStatus === 'closed' && styles.statusToggleBtnClosed]}
+            onPress={handleToggleStatus}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.statusToggleText}>Đổi trạng thái</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Stats Period Switcher Tabs ── */}
+        <View style={styles.periodTabs}>
+          {(['today', 'yesterday', 'week'] as const).map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[styles.periodTabBtn, statsPeriod === p && styles.periodTabBtnActive]}
+              onPress={() => setStatsPeriod(p)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.periodTabLabel, statsPeriod === p && styles.periodTabLabelActive]}>
+                {p === 'today' ? 'Hôm nay' : p === 'yesterday' ? 'Hôm qua' : '7 ngày qua'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Dashboard Row (Revenue + Urgent Orders side-by-side) ── */}
+        <View style={styles.dashboardRow}>
+          {/* Left Col: Doanh thu (Revenue Card) */}
+          <View style={styles.dashboardColLeft}>
+            <View style={styles.heroCardCompact}>
+              <View>
+                <Text style={styles.heroLabelCompact}>
+                  Doanh thu {statsPeriod === 'today' ? 'hôm nay' : statsPeriod === 'yesterday' ? 'hôm qua' : '7 ngày'}
                 </Text>
+                <Text style={styles.heroRevenueCompact}>{formatCurrency(currentStats.revenue)}</Text>
               </View>
-            </View>
-            <View style={styles.heroOrders}>
-              <Text style={styles.heroOrdersNum}>{TODAY_STATS.ordersTotal}</Text>
-              <Text style={styles.heroOrdersLabel}>đơn{'\n'}hôm nay</Text>
+              <View style={styles.heroDividerCompact} />
+              <View style={{ gap: 2 }}>
+                <View style={styles.heroRowCompact}>
+                  <MaterialIcons name="receipt" size={11} color="#BAE6FD" />
+                  <Text style={styles.heroTextCompact}>{currentStats.ordersTotal} đơn hàng</Text>
+                </View>
+                <View style={styles.heroRowCompact}>
+                  <MaterialIcons name="account-balance-wallet" size={11} color="#BAE6FD" />
+                  <Text style={styles.heroTextCompact} numberOfLines={1}>{formatCurrency(currentStats.payout)} về ví</Text>
+                </View>
+                <View style={styles.heroRowCompact}>
+                  <MaterialIcons name="trending-up" size={11} color="#BAE6FD" />
+                  <Text style={styles.heroTextCompact} numberOfLines={1}>{statsPeriod === 'week' ? '+8% tuần qua' : '+23% so hôm qua'}</Text>
+                </View>
+              </View>
             </View>
           </View>
 
-          {/* Growth indicator */}
-          <View style={styles.heroGrowth}>
-            <MaterialIcons name="trending-up" size={16} color={COLORS.driverLight} />
-            <Text style={styles.heroGrowthText}>+23% so với hôm qua</Text>
-            <View style={styles.heroDivider} />
-            <MaterialIcons name="person-add" size={14} color={COLORS.driverLight} />
-            <Text style={styles.heroGrowthText}>{TODAY_STATS.newCustomers} khách mới</Text>
+          {/* Right Col: Đơn hàng cần chuẩn bị gấp */}
+          <View style={styles.dashboardColRight}>
+            <View style={styles.urgentCardCompact}>
+              <View style={styles.urgentHeaderCompact}>
+                <Text style={styles.urgentTitleCompact}>Chuẩn bị gấp 🔥</Text>
+                <TouchableOpacity onPress={() => router.push('/merchant-orders')}>
+                  <Text style={styles.urgentSeeAllCompact}>Đơn ({activeOrders.length}) ›</Text>
+                </TouchableOpacity>
+              </View>
+
+              {activeOrders.length === 0 ? (
+                <View style={styles.urgentEmptyCompact}>
+                  <MaterialIcons name="check-circle" size={24} color={COLORS.success} />
+                  <Text style={styles.urgentEmptyTextCompact}>Đã xong sạch đơn</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                  {activeOrders.slice(0, 3).map((o) => {
+                    const isNew = o.status === 'new';
+                    return (
+                      <TouchableOpacity
+                        key={o.id}
+                        style={styles.urgentItemCompact}
+                        onPress={() => handleOrderPress(o)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={styles.urgentItemIdCompact}>#{o.id}</Text>
+                          <View style={[styles.urgentStatusPillCompact, { backgroundColor: isNew ? '#FEE2E2' : '#FEF3C7' }]}>
+                            <Text style={[styles.urgentStatusTextCompact, { color: isNew ? COLORS.error : '#D97706' }]}>
+                              {isNew ? 'Mới' : 'Làm'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.urgentItemDescCompact} numberOfLines={1}>
+                          {o.customerName} · {o.itemsCount} món ({o.time})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
           </View>
         </View>
 
@@ -373,17 +753,17 @@ export default function MerchantHomeScreen() {
         <View style={styles.statsGrid}>
           <StatCard
             label="Giá trị TB/đơn"
-            value={formatCurrency(TODAY_STATS.avgOrderValue)}
+            value={formatCurrency(currentStats.avgOrderValue)}
             icon="attach-money" iconBg="#DCFCE7" iconColor="#16A34A"
           />
           <StatCard
-            label="Đơn hoàn thành"
-            value={`${TODAY_STATS.ordersCompleted}/${TODAY_STATS.ordersTotal}`}
+            label="Hoàn thành"
+            value={`${currentStats.ordersCompleted}/${currentStats.ordersTotal}`}
             icon="check-circle" iconBg={COLORS.primaryLight} iconColor={COLORS.primaryDark}
           />
           <StatCard
             label="Đã huỷ"
-            value={`${TODAY_STATS.ordersCancelled}`}
+            value={`${currentStats.ordersCancelled}`}
             icon="cancel" iconBg="#FEE2E2" iconColor={COLORS.error}
           />
         </View>
@@ -400,7 +780,7 @@ export default function MerchantHomeScreen() {
                 activeOpacity={0.75}
               >
                 <View style={[styles.quickIcon, { backgroundColor: q.bg }]}>
-                  <MaterialIcons name={q.icon as any} size={24} color={q.color} />
+                  <MaterialIcons name={q.icon as any} size={20} color={q.color} />
                 </View>
                 <Text style={styles.quickLabel}>{q.label}</Text>
               </TouchableOpacity>
@@ -412,10 +792,10 @@ export default function MerchantHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đơn theo giờ</Text>
-            <Text style={styles.sectionSub}>Hôm nay · {TODAY_STATS.ordersTotal} đơn</Text>
+            <Text style={styles.sectionSub}>Hôm nay · {currentStats.ordersTotal} đơn</Text>
           </View>
           <View style={styles.card}>
-            <HourlyChart />
+            <HourlyChart data={currentStats.hourly} />
           </View>
         </View>
 
@@ -428,55 +808,92 @@ export default function MerchantHomeScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.card}>
-            <OrderBreakdown />
+            <OrderBreakdown stats={currentStats} />
           </View>
         </View>
 
-        {/* ── Feedback Section ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Đánh giá khách hàng</Text>
-              <View style={styles.ratingRow}>
-                <Text style={styles.avgRating}>{avgRating}</Text>
-                <StarRating rating={Math.round(parseFloat(avgRating))} />
-                <Text style={styles.ratingCount}>({FEEDBACKS.length} hôm nay)</Text>
-              </View>
+        {/* ── Active Campaigns Widget ── */}
+        {campaigns.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Chiến dịch Marketing đang chạy</Text>
+              <TouchableOpacity onPress={() => setMktVisible(true)}>
+                <Text style={styles.seeAll}>+ Tạo thêm</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-
-          {FEEDBACKS.map((fb) => (
-            <View key={fb.id} style={styles.feedbackCard}>
-              <View style={styles.feedbackHeader}>
-                {/* Avatar */}
-                <View style={[
-                  styles.feedbackAvatar,
-                  { backgroundColor: fb.rating >= 4 ? COLORS.primaryLight : '#FEF3C7' },
-                ]}>
-                  <Text style={[
-                    styles.feedbackAvatarText,
-                    { color: fb.rating >= 4 ? COLORS.primaryDark : '#D97706' },
-                  ]}>
-                    {fb.customerName.charAt(0)}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={styles.feedbackName}>{fb.customerName}</Text>
-                    <Text style={styles.feedbackTime}>{fb.time}</Text>
+            <View style={{ gap: 10 }}>
+              {campaigns.map((c) => (
+                <View key={c.id} style={styles.campaignCard}>
+                  <View style={styles.campaignHeader}>
+                    <View style={[styles.campaignIconBox, { backgroundColor: c.type === 'coupon' ? '#FEF3C7' : c.type === 'flash_sale' ? '#FEE2E2' : '#E0F7FE' }]}>
+                      <MaterialIcons
+                        name={c.type === 'coupon' ? 'local-offer' : c.type === 'flash_sale' ? 'flash-on' : 'campaign'}
+                        size={18}
+                        color={c.type === 'coupon' ? '#D97706' : c.type === 'flash_sale' ? COLORS.error : COLORS.primaryDark}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.campaignTitle}>{c.title}</Text>
+                        <View style={[styles.campaignStatusPill, { backgroundColor: c.status === 'active' ? '#DCFCE7' : '#F1F5F9' }]}>
+                          <Text style={[styles.campaignStatusLabel, { color: c.status === 'active' ? '#16A34A' : COLORS.textSecondary }]}>
+                            {c.status === 'active' ? 'Đang chạy' : 'Đã dừng'}
+                          </Text>
+                        </View>
+                      </View>
+                      {c.code && <Text style={styles.campaignCode}>Mã: {c.code}</Text>}
+                      <Text style={styles.campaignDiscount}>{c.discount} · {c.sub}</Text>
+                    </View>
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                    <StarRating rating={fb.rating} />
-                    <View style={styles.orderTag}>
-                      <MaterialIcons name="receipt" size={10} color={COLORS.textLight} />
-                      <Text style={styles.orderTagText}>#{fb.orderId}</Text>
+                  <View style={styles.campaignFooter}>
+                    <Text style={styles.campaignPerformance}>{c.performance}</Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <TouchableOpacity onPress={() => handleCampaignPause(c.id)}>
+                        <Text style={[styles.campaignActionBtnText, { color: COLORS.primaryDark }]}>
+                          {c.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleCampaignDelete(c.id)}>
+                        <Text style={[styles.campaignActionBtnText, { color: COLORS.error }]}>Xóa</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
-              </View>
-              <Text style={styles.feedbackComment}>"{fb.comment}"</Text>
+              ))}
             </View>
-          ))}
+          </View>
+        )}
+
+        {/* ── Feedback Summary Card Section ── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Đánh giá & Phản hồi ⭐</Text>
+            <TouchableOpacity onPress={() => router.push('/feedbacks')}>
+              <Text style={styles.seeAll}>Chi tiết →</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.ratingSummaryCard}
+            onPress={() => router.push('/feedbacks')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.ratingSummaryLeft}>
+              <Text style={styles.ratingSummaryBig}>{avgRating}</Text>
+              <StarRating rating={Math.round(parseFloat(avgRating))} />
+              <Text style={styles.ratingSummaryCount}>Tất cả {FEEDBACKS.length} đánh giá</Text>
+            </View>
+            <View style={styles.ratingSummaryDivider} />
+            <View style={styles.ratingSummaryRight}>
+              <Text style={styles.ratingSummaryHeading}>Phản hồi khách hàng</Text>
+              <Text style={styles.ratingSummarySub}>
+                Trả lời các đánh giá của khách giúp nâng cao uy tín và tỷ lệ quay lại của quán.
+              </Text>
+              <View style={styles.ratingSummaryBtn}>
+                <Text style={styles.ratingSummaryBtnText}>Quản lý đánh giá</Text>
+                <MaterialIcons name="chevron-right" size={16} color={COLORS.primaryDark} />
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* ── Marketing Banner ── */}
@@ -501,7 +918,7 @@ export default function MerchantHomeScreen() {
         <View style={[styles.card, styles.tipsCard]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <MaterialIcons name="lightbulb" size={18} color="#F59E0B" />
-            <Text style={styles.tipsTitle}>Mẹo hôm nay</Text>
+            <Text style={styles.tipsTitle}>Mẹo hoạt động hôm nay</Text>
           </View>
           {[
             'Giờ cao điểm 11h-13h: đảm bảo đủ nguyên liệu và nhân lực.',
@@ -518,8 +935,13 @@ export default function MerchantHomeScreen() {
         <View style={{ height: 32 }} />
       </ScrollView>
 
-      {/* Marketing Modal */}
-      <MarketingModal visible={mktVisible} onClose={() => setMktVisible(false)} />
+      {/* Marketing Tools modal */}
+      <MarketingModal
+        visible={mktVisible}
+        onClose={() => setMktVisible(false)}
+        onCreateCampaign={handleCreateCampaign}
+      />
+
     </SafeAreaView>
   );
 }
@@ -533,7 +955,7 @@ const styles = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
@@ -545,7 +967,7 @@ const styles = StyleSheet.create({
   greeting:  { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500' },
   shopName:  { fontSize: SIZES.h3, fontWeight: '800', color: COLORS.text, marginTop: 2 },
   dateText:  { fontSize: 11, color: COLORS.textLight, marginTop: 2 },
-  headerRight: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 4 },
+  headerRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   notifBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center',
@@ -556,30 +978,189 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.error, borderWidth: 1.5, borderColor: COLORS.white,
   },
 
-  // Hero Revenue Card
-  heroCard: {
+  // Operational Status Banner
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#DCFCE7', // Light green
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  statusBannerClosed: {
+    backgroundColor: '#FEE2E2', // Light red
+  },
+  statusBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusIndicator: {
+    width: 8, height: 8,
+    borderRadius: 4,
+  },
+  statusBannerText: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  statusToggleBtn: {
+    backgroundColor: '#16A34A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  statusToggleBtnClosed: {
+    backgroundColor: COLORS.error,
+  },
+  statusToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+
+  // Stats Period Switcher Tabs
+  periodTabs: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginHorizontal: SPACING.md,
     marginTop: SPACING.md,
-    borderRadius: 22,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 2,
+  },
+  periodTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  periodTabBtnActive: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
+  },
+  periodTabLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  periodTabLabelActive: {
+    color: COLORS.text,
+    fontWeight: '800',
+  },
+
+  // Side-by-Side Dashboard Row
+  dashboardRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  dashboardColLeft: {
+    flex: 1,
+  },
+  dashboardColRight: {
+    flex: 1,
+  },
+
+  // Compact cards
+  heroCardCompact: {
     backgroundColor: COLORS.primaryDark,
-    padding: SPACING.md + 4,
-    ...SHADOWS.heavy,
+    borderRadius: 18,
+    padding: SPACING.md,
+    ...SHADOWS.medium,
+    height: 165,
+    justifyContent: 'space-between',
   },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  heroLabel: { fontSize: 12, color: '#BAE6FD', fontWeight: '600', marginBottom: 4 },
-  heroRevenue: { fontSize: 28, fontWeight: '900', color: COLORS.white, letterSpacing: -0.5 },
-  heroPayout: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  heroPayoutText: { fontSize: 11, color: '#BAE6FD' },
-  heroOrders: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: SPACING.md, minWidth: 70 },
-  heroOrdersNum: { fontSize: 32, fontWeight: '900', color: COLORS.white },
-  heroOrdersLabel: { fontSize: 11, color: '#BAE6FD', textAlign: 'center', lineHeight: 15 },
-  heroGrowth: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: SPACING.md, paddingTop: SPACING.sm,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)',
+  heroLabelCompact: {
+    fontSize: 9,
+    color: '#BAE6FD',
+    fontWeight: '600',
   },
-  heroGrowthText: { fontSize: 11, color: '#BAE6FD', flex: 1 },
-  heroDivider: { width: 1, height: 12, backgroundColor: 'rgba(255,255,255,0.3)' },
+  heroRevenueCompact: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.white,
+    marginTop: 2,
+  },
+  heroDividerCompact: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginVertical: 4,
+  },
+  heroRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroTextCompact: {
+    fontSize: 10,
+    color: '#BAE6FD',
+    fontWeight: '500',
+  },
+
+  urgentCardCompact: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    ...SHADOWS.light,
+    height: 165,
+  },
+  urgentHeaderCompact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  urgentTitleCompact: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  urgentSeeAllCompact: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
+  urgentEmptyCompact: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  urgentEmptyTextCompact: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+  urgentItemCompact: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.background,
+    paddingVertical: 5,
+  },
+  urgentItemIdCompact: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  urgentStatusPillCompact: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  urgentStatusTextCompact: {
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  urgentItemDescCompact: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
 
   // Stats Grid
   statsGrid: {
@@ -601,21 +1182,22 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   quickCard: {
-    width: (SCREEN_W - SPACING.md * 2 - SPACING.sm * 2) / 3,
+    width: (SCREEN_W - SPACING.md * 2 - SPACING.sm * 3) / 4,
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: SPACING.md,
+    borderRadius: 14,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
     ...SHADOWS.light,
   },
   quickIcon: {
-    width: 50, height: 50, borderRadius: 15,
+    width: 42, height: 42, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  quickLabel: { fontSize: 12, fontWeight: '700', color: COLORS.text, textAlign: 'center' },
+  quickLabel: { fontSize: 10, fontWeight: '700', color: COLORS.text, textAlign: 'center' },
 
   // Card wrapper
   card: {
@@ -627,30 +1209,127 @@ const styles = StyleSheet.create({
     ...SHADOWS.light,
   },
 
-  // Feedback
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  avgRating: { fontSize: 18, fontWeight: '900', color: '#F59E0B' },
-  ratingCount: { fontSize: 11, color: COLORS.textSecondary },
-  feedbackCard: {
+  // Campaigns
+  campaignCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    ...SHADOWS.light,
+  },
+  campaignHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  campaignIconBox: {
+    width: 36, height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  campaignTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  campaignStatusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  campaignStatusLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  campaignCode: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  campaignDiscount: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  campaignFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 10,
+    paddingTop: 8,
+  },
+  campaignPerformance: {
+    fontSize: 10,
+    color: COLORS.textLight,
+    fontWeight: '500',
+  },
+  campaignActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Feedback Summary Card (Homepage new style)
+  ratingSummaryCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginTop: SPACING.sm,
     ...SHADOWS.light,
+    gap: 12,
   },
-  feedbackHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
-  feedbackAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center',
+  ratingSummaryLeft: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 90,
   },
-  feedbackAvatarText: { fontSize: 16, fontWeight: '800' },
-  feedbackName: { fontSize: 13, fontWeight: '700', color: COLORS.text },
-  feedbackTime: { fontSize: 11, color: COLORS.textLight },
-  orderTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: COLORS.background, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  orderTagText: { fontSize: 10, fontWeight: '600', color: COLORS.textLight },
-  feedbackComment: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18, fontStyle: 'italic' },
+  ratingSummaryBig: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: COLORS.text,
+    lineHeight: 34,
+  },
+  ratingSummaryCount: {
+    fontSize: 8,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  ratingSummaryDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+  },
+  ratingSummaryRight: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  ratingSummaryHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  ratingSummarySub: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    lineHeight: 14,
+  },
+  ratingSummaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  ratingSummaryBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
 
   // Marketing banner
   mktBanner: {
@@ -682,8 +1361,6 @@ const styles = StyleSheet.create({
   tipText: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 18, flex: 1 },
 });
 
-// ─── Mini chart styles ──────────────────────────────────────────────────────
-
 const chart = StyleSheet.create({
   container: { paddingVertical: 4 },
   bars: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 90 },
@@ -693,8 +1370,6 @@ const chart = StyleSheet.create({
   barFill: { width: '100%', borderRadius: 4, minHeight: 4 },
   barHour: { fontSize: 9, color: COLORS.textLight, marginTop: 4 },
 });
-
-// ─── Breakdown styles ─────────────────────────────────────────────────────────
 
 const bd = StyleSheet.create({
   container: { gap: 12 },
@@ -706,8 +1381,6 @@ const bd = StyleSheet.create({
   badge: { minWidth: 28, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center' },
   badgeText: { fontSize: 11, fontWeight: '700' },
 });
-
-// ─── Marketing modal styles ───────────────────────────────────────────────────
 
 const mkt = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
@@ -740,8 +1413,6 @@ const mkt = StyleSheet.create({
   closeBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.textSecondary },
 });
 
-// ─── Stat card styles ─────────────────────────────────────────────────────────
-
 const sc = StyleSheet.create({
   card: {
     flex: 1,
@@ -757,4 +1428,59 @@ const sc = StyleSheet.create({
   label: { fontSize: 10, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 3, lineHeight: 13 },
   value: { fontSize: 16, fontWeight: '900', color: COLORS.text },
   sub:   { fontSize: 10, color: COLORS.textSecondary, marginTop: 2 },
+});
+
+const form = StyleSheet.create({
+  container: {
+    gap: 8,
+    marginTop: 4,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 6,
+  },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  submitBtn: {
+    marginTop: SPACING.md,
+    paddingVertical: 14, borderRadius: 14,
+    backgroundColor: COLORS.primaryDark,
+    alignItems: 'center',
+  },
+  submitBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  featuredBanner: {
+    backgroundColor: '#FEF9C3',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FEF08A',
+    alignItems: 'center',
+  },
+  featuredText: {
+    fontSize: 13,
+    color: '#713F12',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  featuredPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#A16207',
+    marginTop: 12,
+  },
 });
